@@ -27,8 +27,8 @@ int main() {
 	printf("%d\n", test1(0, 0));
 	printf("%d\n", test1(90, 0));
 	printf("%d\n", test1(-90, 0));
-	printf("%d\n", test1(0, 360));
-	printf("%d\n", test1(0, 720));
+	printf("%d\n", test1(35, 360));
+	printf("%d\n", test1(46.12345, 720));
 	printf("%d\n", test1(89.99998, 187));
 	return 0;
 }

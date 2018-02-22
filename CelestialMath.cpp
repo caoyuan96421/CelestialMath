@@ -14,14 +14,22 @@ static inline double clamp(double x) {
 }
 
 #ifndef M_PI
-#define M_PI 3.141592653589793
+#define M_PI 3.14159265358979323846
 #endif
 
 static const double RADIAN = 180.0 / M_PI;
 static const double DEGREE = M_PI / 180.0;
 static const double sidereal_day = 86164.09;
 
-AzimuthalCoordinates CelestialMath::localEquatorialToAzimuthal(LocalEquatorialCoordinates a, LocationCoordinates loc) {
+CartesianVector CartesianVector::operator*(const Transformation &t) {
+	return CartesianVector(t.a11 * x + t.a21 * y + t.a31 * z, t.a12 * x + t.a22 * y + t.a32 * z, t.a13 * x + t.a23 * y + t.a33 * z);
+}
+
+CartesianVector Transformation::operator*(const CartesianVector &vec) { // Left-product of matrix and vector
+	return CartesianVector(a11 * vec.x + a12 * vec.y + a13 * vec.z, a21 * vec.x + a22 * vec.y + a23 * vec.z, a31 * vec.x + a32 * vec.y + a33 * vec.z);
+}
+
+AzimuthalCoordinates CelestialMath::localEquatorialToAzimuthal(const LocalEquatorialCoordinates &a, const LocationCoordinates &loc) {
 	//              cphi             lambda             lambda0
 	double c1 = cos(a.ha * DEGREE), c2 = cos(a.dec * DEGREE), c3 = cos(loc.lat * DEGREE);
 	double s1 = sin(a.ha * DEGREE), s2 = sin(a.dec * DEGREE), s3 = sin(loc.lat * DEGREE);
@@ -29,24 +37,17 @@ AzimuthalCoordinates CelestialMath::localEquatorialToAzimuthal(LocalEquatorialCo
 	s4 = clamp(s4);
 	double y1 = s1 * c2, x1 = s2 * c3 - c1 * c2 * s3;
 
-	AzimuthalCoordinates b;
-	b.alt = asin(s4) * RADIAN;
-	b.azi = atan2(y1, x1) * RADIAN;
-	return b;
+	return AzimuthalCoordinates(asin(clamp(s4)) * RADIAN, atan2(y1, x1) * RADIAN);
 }
 
-LocalEquatorialCoordinates CelestialMath::azimuthalToLocalEquatorial(AzimuthalCoordinates b, LocationCoordinates loc) {
+LocalEquatorialCoordinates CelestialMath::azimuthalToLocalEquatorial(const AzimuthalCoordinates &b, const LocationCoordinates &loc) {
 	//              mu             eps             lambda0
 	double c1 = cos(b.azi * DEGREE), c2 = cos(b.alt * DEGREE), c3 = cos(loc.lat * DEGREE);
 	double s1 = sin(b.azi * DEGREE), s2 = sin(b.alt * DEGREE), s3 = sin(loc.lat * DEGREE);
 	double s4 = c1 * c2 * c3 + s2 * s3;
-	s4 = clamp(s4);
 	double y1 = s1 * c2, x1 = s2 * c3 - c1 * c2 * s3;
 
-	LocalEquatorialCoordinates a;
-	a.dec = asin(s4) * RADIAN;
-	a.ha = atan2(y1, x1) * RADIAN;
-	return a;
+	return LocalEquatorialCoordinates(asin(clamp(s4)) * RADIAN, atan2(y1, x1) * RADIAN);
 }
 
 double CelestialMath::getGreenwichMeanSiderealTime(time_t timestamp) {
@@ -55,21 +56,41 @@ double CelestialMath::getGreenwichMeanSiderealTime(time_t timestamp) {
 	return remainder(gmst, 360.0);
 }
 
-double CelestialMath::getLocalSiderealTime(time_t timestamp, LocationCoordinates loc) {
+double CelestialMath::getLocalSiderealTime(time_t timestamp, const LocationCoordinates &loc) {
 	double gmst = getGreenwichMeanSiderealTime(timestamp);
 	double lst = gmst + loc.lon * 1.00273790935; // Local sidereal time (angle)
 	return remainder(lst, 360.0);
 }
 
-LocalEquatorialCoordinates CelestialMath::equatorialToLocalEquatorial(EquatorialCoordinates e, time_t timestamp, LocationCoordinates loc) {
+LocalEquatorialCoordinates CelestialMath::equatorialToLocalEquatorial(const EquatorialCoordinates &e, time_t timestamp, const LocationCoordinates &loc) {
 	// From phi to cphi
-	return EquatorialCoordinates(e.dec, remainder(getLocalSiderealTime(timestamp, loc) - e.ra, 360.0));
+	return LocalEquatorialCoordinates(e.dec, remainder(getLocalSiderealTime(timestamp, loc) - e.ra, 360.0));
 }
 
-EquatorialCoordinates CelestialMath::localEquatorialToEquatorial(LocalEquatorialCoordinates a, time_t timestamp, LocationCoordinates loc) {
+EquatorialCoordinates CelestialMath::localEquatorialToEquatorial(const LocalEquatorialCoordinates &a, time_t timestamp, const LocationCoordinates &loc) {
 	// From cphi to phi
-	return LocalEquatorialCoordinates(a.dec, remainder(getLocalSiderealTime(timestamp, loc) - a.ha, 360.0));
+	return EquatorialCoordinates(a.dec, remainder(getLocalSiderealTime(timestamp, loc) - a.ha, 360.0));
 }
 
-LocalEquatorialCoordinates CelestialMath::misalignedPolarAxis(LocalEquatorialCoordinates a, AzimuthalCoordinates mpa, LocationCoordinates loc) {
+void CelestialMath::getMisalignedPolarAxisTransformation(Transformation *t, const AzimuthalCoordinates &p, const LocationCoordinates &loc) {
+	double c1 = cos(p.azi * DEGREE), c2 = cos(p.alt * DEGREE), c3 = cos(loc.lat * DEGREE);
+	double s1 = sin(p.azi * DEGREE), s2 = sin(p.alt * DEGREE), s3 = sin(loc.lat * DEGREE);
+	// Matrix to convert from basis vectors in misaligned PA to correct PA
+	t->a11 = c1 * s2 * s3 + c2 * c3;
+	t->a12 = -s1 * s3;
+	t->a13 = -c1 * c2 * s3 + s2 * c3;
+	t->a21 = s1 * s2;
+	t->a22 = c1;
+	t->a23 = -s1 * c2;
+	t->a31 = -c1 * s2 * c3 + c2 * s3;
+	t->a32 = s1 * c3;
+	t->a33 = c1 * c2 * c3 + s2 * s3;
+}
+
+LocalEquatorialCoordinates CelestialMath::transform(Transformation* t, const LocalEquatorialCoordinates& a) {
+	double c1 = cos(a.dec * DEGREE), c2 = cos(a.ha * DEGREE);
+	double s1 = sin(a.dec * DEGREE), s2 = cos(a.ha * DEGREE);
+	CartesianVector X = CartesianVector(c1 * c2, -c1 * s2, s1) * (*t);
+
+	return LocalEquatorialCoordinates(asin(clamp(X.z)) * RADIAN, atan2(-X.y, X.x) * RADIAN);
 }

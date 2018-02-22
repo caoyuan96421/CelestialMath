@@ -42,6 +42,24 @@ struct LocationCoordinates {
 	}
 };
 
+struct Transformation;
+
+struct CartesianVector {
+	double x, y, z;
+	CartesianVector(double x = 0, double y = 0, double z = 0) :
+			x(x), y(y), z(z) {
+	}
+	CartesianVector operator*(const Transformation &t);
+};
+
+struct Transformation {
+	double a11, a12, a13;
+	double a21, a22, a23;
+	double a31, a32, a33;
+	CartesianVector operator*(const CartesianVector &vec);
+};
+
+
 /**
  * Utility functions for doing math on coordinates of the celestial sphere
  */
@@ -53,15 +71,16 @@ public:
 	}
 
 	/*Basic conversion between reference frames*/
-	static AzimuthalCoordinates localEquatorialToAzimuthal(LocalEquatorialCoordinates a, LocationCoordinates loc);
-	static LocalEquatorialCoordinates azimuthalToLocalEquatorial(AzimuthalCoordinates b, LocationCoordinates loc);
+	static AzimuthalCoordinates localEquatorialToAzimuthal(const LocalEquatorialCoordinates &a, const LocationCoordinates &loc);
+	static LocalEquatorialCoordinates azimuthalToLocalEquatorial(const AzimuthalCoordinates &b, const LocationCoordinates &loc);
 	static double getGreenwichMeanSiderealTime(time_t timestamp);
-	static double getLocalSiderealTime(time_t timestamp, LocationCoordinates loc);
-	static LocalEquatorialCoordinates equatorialToLocalEquatorial(EquatorialCoordinates e, time_t timestamp, LocationCoordinates loc);
-	static EquatorialCoordinates localEquatorialToEquatorial(LocalEquatorialCoordinates a, time_t timestamp, LocationCoordinates loc);
+	static double getLocalSiderealTime(time_t timestamp, const LocationCoordinates &loc);
+	static LocalEquatorialCoordinates equatorialToLocalEquatorial(const EquatorialCoordinates &e, time_t timestamp, const LocationCoordinates &loc);
+	static EquatorialCoordinates localEquatorialToEquatorial(const LocalEquatorialCoordinates &a, time_t timestamp, const LocationCoordinates &loc);
 
 	/*Misalignment correction functions*/
-	static LocalEquatorialCoordinates misalignedPolarAxis(LocalEquatorialCoordinates a, AzimuthalCoordinates mpa, LocationCoordinates loc);
+	static void getMisalignedPolarAxisTransformation(Transformation *t, const AzimuthalCoordinates &mpa, const LocationCoordinates &loc);
+	static LocalEquatorialCoordinates transform(Transformation *t, const LocalEquatorialCoordinates &a);
 };
 
 #endif /* CELESTIALMATH_H_ */
